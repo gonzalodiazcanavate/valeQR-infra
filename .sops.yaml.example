@@ -1,0 +1,6 @@
+# Cifrado de secretos con sops + age. Copiar a .sops.yaml y sustituir la clave pública (age-keygen -y).
+creation_rules:
+  - path_regex: secrets/.*\.enc$
+    age: >-
+      age1REEMPLAZAR_POR_LA_CLAVE_PUBLICA_DEL_VPS,
+      age1REEMPLAZAR_POR_LA_CLAVE_PUBLICA_DEL_OPERADOR

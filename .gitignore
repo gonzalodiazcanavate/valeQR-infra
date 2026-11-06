@@ -1,0 +1,6 @@
+compose/.env
+*.key
+keys.txt
+.deploy/
+node_modules
+.DS_Store

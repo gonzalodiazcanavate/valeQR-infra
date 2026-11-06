@@ -1,0 +1,41 @@
+# Sitio web (SPA) y API. Los dominios llegan por variables de entorno (APP_DOMAIN, API_DOMAIN).
+# TLS automático (Let's Encrypt) y HTTP/3 por defecto.
+
+{$APP_DOMAIN} {
+	root * /srv/web/current
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(self), geolocation=(), microphone=()"
+		Content-Security-Policy "default-src 'self'; connect-src 'self' https://{$API_DOMAIN}; img-src 'self' data:; font-src 'self'; style-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		-Server
+	}
+
+	# Enlaces profundos de la app móvil (assetlinks.json / apple-app-site-association).
+	@aasa path /.well-known/apple-app-site-association
+	header @aasa Content-Type application/json
+
+	# Los assets con hash son inmutables; index.html nunca se cachea.
+	@assets path /assets/*
+	header @assets Cache-Control "public, max-age=31536000, immutable"
+	@index path / /index.html
+	header @index Cache-Control "no-cache"
+
+	try_files {path} /index.html
+	file_server
+}
+
+{$API_DOMAIN} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+	reverse_proxy api:3000 {
+		health_uri /healthz
+		health_interval 15s
+	}
+}

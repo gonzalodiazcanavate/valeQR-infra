@@ -1,0 +1,25 @@
+# Base de datos local para desarrollo (valeQR-api). Uso:
+#   docker compose -f compose/dev.yml up -d
+# Contraseñas fijas solo para local; nunca reutilizar en servidores.
+name: autoqr-dev
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD: dev-superuser
+      AUTOQR_OWNER_PASSWORD: dev-owner
+      AUTOQR_APP_PASSWORD: dev-app
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:

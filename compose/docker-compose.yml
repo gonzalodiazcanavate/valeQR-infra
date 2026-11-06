@@ -1,0 +1,85 @@
+# Producción de AutoQR en un VPS. Variables en .env (ver prod.env.example). Despliegue: scripts/deploy.sh
+name: autoqr
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      AUTOQR_OWNER_PASSWORD: ${AUTOQR_OWNER_PASSWORD:?}
+      AUTOQR_APP_PASSWORD: ${AUTOQR_APP_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d autoqr']
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    networks: [db]
+    mem_limit: 1g
+    security_opt: ['no-new-privileges:true']
+
+  # Ejecución puntual antes de cada despliegue: docker compose run --rm migrate
+  migrate:
+    image: ghcr.io/gonzalodiazcanavate/valeqr-api:${API_TAG:?}
+    command: ['node', 'dist/db/migrate-cli.js']
+    profiles: ['tools']
+    environment:
+      MIGRATION_DATABASE_URL: postgres://autoqr_owner:${AUTOQR_OWNER_PASSWORD}@postgres:5432/autoqr
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [db]
+
+  api:
+    image: ghcr.io/gonzalodiazcanavate/valeqr-api:${API_TAG:?}
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://autoqr_app_login:${AUTOQR_APP_PASSWORD}@postgres:5432/autoqr
+      TRUST_PROXY: 'true'
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      MIN_APP_VERSION: ${MIN_APP_VERSION:-0.0.0}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks: [db, edge]
+    mem_limit: 512m
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?}
+      API_DOMAIN: ${API_DOMAIN:?}
+    ports:
+      - '80:80'
+      - '443:443'
+      - '443:443/udp'
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ${WEB_ROOT:-/srv/autoqr/web}:/srv/web:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [api]
+    networks: [edge]
+    mem_limit: 256m
+    security_opt: ['no-new-privileges:true']
+
+networks:
+  # PostgreSQL solo en una red interna sin salida a internet.
+  db:
+    internal: true
+  # Caddy y la API (que necesita salida para email y push).
+  edge: {}
+
+volumes:
+  pgdata:
+  caddy_data:
+  caddy_config:
